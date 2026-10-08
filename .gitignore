@@ -1,0 +1,48 @@
+# VS Code
+.vscode/
+
+# Visual Studio
+.vs/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+
+# SQL Server / local database files
+*.mdf
+*.ldf
+*.bak
+
+# Python cache - useful if project expands later
+__pycache__/
+*.pyc
+
+# Environment / secret files
+.env
+.env.*
+*.secrets
+secrets.json
+
+# Credentials / certificates
+*.pfx
+*.p12
+*.pem
+*.key
+
+# Local Azure settings
+local.settings.json
+
+# Terraform state if added later
+*.tfstate
+*.tfstate.*
+
+# Build/output folders
+bin/
+obj/
+dist/
