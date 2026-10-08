@@ -1,0 +1,21 @@
+{
+	"name": "ds_azsql_generic_dev",
+	"properties": {
+		"linkedServiceName": {
+			"referenceName": "ls_azsql_metadata_dev",
+			"type": "LinkedServiceReference"
+		},
+		"parameters": {
+			"pSourceSchema": {
+				"type": "string"
+			},
+			"pSourceTable": {
+				"type": "string"
+			}
+		},
+		"annotations": [],
+		"type": "AzureSqlTable",
+		"schema": []
+	},
+	"type": "Microsoft.DataFactory/factories/datasets"
+}

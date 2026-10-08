@@ -1,0 +1,328 @@
+{
+	"name": "pl_master_metadata_ingestion",
+	"properties": {
+		"activities": [
+			{
+				"name": "lkp_active_ingestion_metadata",
+				"type": "Lookup",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderQuery": {
+							"value": "SELECT\n    MetadataID,\n    PipelineName,\n    SourceSchema,\n    SourceTable,\n    WatermarkColumn,\n    LastWatermark,\n    LoadType,\n    TargetPath,\n    IsActive,\n    GETDATE() AS CurrentWatermark\nFROM sales.etl_metadata\nWHERE IsActive = 1;",
+							"type": "Expression"
+						},
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "ds_azsql_metadata_dev",
+						"type": "DatasetReference"
+					},
+					"firstRowOnly": false
+				}
+			},
+			{
+				"name": "fe_process_active_tables",
+				"type": "ForEach",
+				"dependsOn": [
+					{
+						"activity": "lkp_active_ingestion_metadata",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"items": {
+						"value": "@activity('lkp_active_ingestion_metadata').output.value",
+						"type": "Expression"
+					},
+					"isSequential": true,
+					"activities": [
+						{
+							"name": "if_load_type",
+							"type": "IfCondition",
+							"dependsOn": [],
+							"userProperties": [],
+							"typeProperties": {
+								"expression": {
+									"value": "@equals(item().LoadType,'Incremental')",
+									"type": "Expression"
+								},
+								"ifFalseActivities": [
+									{
+										"name": "cpy_full_load",
+										"type": "Copy",
+										"dependsOn": [],
+										"policy": {
+											"timeout": "0.12:00:00",
+											"retry": 0,
+											"retryIntervalInSeconds": 30,
+											"secureOutput": false,
+											"secureInput": false
+										},
+										"userProperties": [],
+										"typeProperties": {
+											"source": {
+												"type": "AzureSqlSource",
+												"sqlReaderQuery": {
+													"value": "SELECT *\nFROM @{item().SourceSchema}.@{item().SourceTable}",
+													"type": "Expression"
+												},
+												"queryTimeout": "02:00:00",
+												"partitionOption": "None"
+											},
+											"sink": {
+												"type": "ParquetSink",
+												"storeSettings": {
+													"type": "AzureBlobFSWriteSettings"
+												},
+												"formatSettings": {
+													"type": "ParquetWriteSettings"
+												}
+											},
+											"enableStaging": false,
+											"translator": {
+												"type": "TabularTranslator",
+												"typeConversion": true,
+												"typeConversionSettings": {
+													"allowDataTruncation": true,
+													"treatBooleanAsNumber": false
+												}
+											}
+										},
+										"inputs": [
+											{
+												"referenceName": "ds_azsql_generic_dev",
+												"type": "DatasetReference",
+												"parameters": {
+													"pSourceSchema": {
+														"value": "@item().SourceSchema",
+														"type": "Expression"
+													},
+													"pSourceTable": {
+														"value": "@item().SourceTable",
+														"type": "Expression"
+													}
+												}
+											}
+										],
+										"outputs": [
+											{
+												"referenceName": "ds_adls_parquet_generic_dev",
+												"type": "DatasetReference",
+												"parameters": {
+													"pContainer": {
+														"value": "bronze",
+														"type": "Expression"
+													},
+													"pFolderPath": {
+														"value": "@replace(item().TargetPath,'bronze/','')",
+														"type": "Expression"
+													},
+													"pFileName": {
+														"value": "@concat(toLower(item().SourceTable),'.parquet')",
+														"type": "Expression"
+													}
+												}
+											}
+										]
+									}
+								],
+								"ifTrueActivities": [
+									{
+										"name": "cpy_incremental_load",
+										"type": "Copy",
+										"dependsOn": [],
+										"policy": {
+											"timeout": "0.12:00:00",
+											"retry": 0,
+											"retryIntervalInSeconds": 30,
+											"secureOutput": false,
+											"secureInput": false
+										},
+										"userProperties": [],
+										"typeProperties": {
+											"source": {
+												"type": "AzureSqlSource",
+												"sqlReaderQuery": {
+													"value": "@concat(\n    'SELECT * FROM ',\n    item().SourceSchema,\n    '.',\n    item().SourceTable,\n    ' WHERE ',\n    item().WatermarkColumn,\n    ' > ''',\n    item().LastWatermark,\n    ''' AND ',\n    item().WatermarkColumn,\n    ' <= ''',\n    item().CurrentWatermark,\n    ''''\n)",
+													"type": "Expression"
+												},
+												"queryTimeout": "02:00:00",
+												"partitionOption": "None"
+											},
+											"sink": {
+												"type": "ParquetSink",
+												"storeSettings": {
+													"type": "AzureBlobFSWriteSettings"
+												},
+												"formatSettings": {
+													"type": "ParquetWriteSettings"
+												}
+											},
+											"enableStaging": false,
+											"translator": {
+												"type": "TabularTranslator",
+												"typeConversion": true,
+												"typeConversionSettings": {
+													"allowDataTruncation": true,
+													"treatBooleanAsNumber": false
+												}
+											}
+										},
+										"inputs": [
+											{
+												"referenceName": "ds_azsql_generic_dev",
+												"type": "DatasetReference",
+												"parameters": {
+													"pSourceSchema": {
+														"value": "@item().SourceSchema\n",
+														"type": "Expression"
+													},
+													"pSourceTable": {
+														"value": "@item().SourceTable",
+														"type": "Expression"
+													}
+												}
+											}
+										],
+										"outputs": [
+											{
+												"referenceName": "ds_adls_parquet_generic_dev",
+												"type": "DatasetReference",
+												"parameters": {
+													"pContainer": {
+														"value": "bronze",
+														"type": "Expression"
+													},
+													"pFolderPath": {
+														"value": "@replace(item().TargetPath,'bronze/','')",
+														"type": "Expression"
+													},
+													"pFileName": {
+														"value": "@concat(toLower(item().SourceTable),'.parquet')",
+														"type": "Expression"
+													}
+												}
+											}
+										]
+									},
+									{
+										"name": "sp_update_watermark",
+										"type": "SqlServerStoredProcedure",
+										"dependsOn": [
+											{
+												"activity": "cpy_incremental_load",
+												"dependencyConditions": [
+													"Succeeded"
+												]
+											}
+										],
+										"policy": {
+											"timeout": "0.12:00:00",
+											"retry": 0,
+											"retryIntervalInSeconds": 30,
+											"secureOutput": false,
+											"secureInput": false
+										},
+										"userProperties": [],
+										"typeProperties": {
+											"storedProcedureName": "[sales].[usp_UpdateWatermark]",
+											"storedProcedureParameters": {
+												"NewWatermark": {
+													"value": "@item().CurrentWatermark",
+													"type": "DateTime"
+												},
+												"SourceTable": {
+													"value": "@item().SourceTable",
+													"type": "String"
+												}
+											}
+										},
+										"linkedServiceName": {
+											"referenceName": "ls_azsql_metadata_dev",
+											"type": "LinkedServiceReference"
+										}
+									},
+									{
+										"name": "sp_audit_incremental_success",
+										"type": "SqlServerStoredProcedure",
+										"dependsOn": [
+											{
+												"activity": "sp_update_watermark",
+												"dependencyConditions": [
+													"Succeeded"
+												]
+											}
+										],
+										"policy": {
+											"timeout": "0.12:00:00",
+											"retry": 0,
+											"retryIntervalInSeconds": 30,
+											"secureOutput": false,
+											"secureInput": false
+										},
+										"userProperties": [],
+										"typeProperties": {
+											"storedProcedureName": "[sales].[usp_InsertAudit]",
+											"storedProcedureParameters": {
+												"EndTime": {
+													"value": "@utcNow()",
+													"type": "DateTime"
+												},
+												"ErrorMessage": {
+													"value": "null",
+													"type": "String"
+												},
+												"RowsCopied": {
+													"value": "@activity('cpy_incremental_load').output.rowsCopied",
+													"type": "Int32"
+												},
+												"RunID": {
+													"value": {
+														"value": "@pipeline().RunId",
+														"type": "Expression"
+													},
+													"type": "String"
+												},
+												"SourceTable": {
+													"value": "@item().SourceTable",
+													"type": "String"
+												},
+												"StartTime": {
+													"value": "@pipeline().TriggerTime",
+													"type": "DateTime"
+												},
+												"Status": {
+													"value": "Success",
+													"type": "String"
+												}
+											}
+										},
+										"linkedServiceName": {
+											"referenceName": "ls_azsql_metadata_dev",
+											"type": "LinkedServiceReference"
+										}
+									}
+								]
+							}
+						}
+					]
+				}
+			}
+		],
+		"annotations": []
+	}
+}

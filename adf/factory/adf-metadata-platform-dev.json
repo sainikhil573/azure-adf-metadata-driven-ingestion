@@ -1,0 +1,15 @@
+{
+	"name": "adf-metadata-platform-dev",
+	"properties": {
+		"trustModeClaimForMi": {
+			"value": "Disabled",
+			"editable": true
+		}
+	},
+	"location": "eastus",
+	"identity": {
+		"type": "SystemAssigned",
+		"principalId": "b950a791-0ef4-4a4f-93c3-e58455289a8d",
+		"tenantId": "9436a91b-b088-418d-9326-34bcba74586c"
+	}
+}
